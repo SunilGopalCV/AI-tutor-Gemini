@@ -37,6 +37,42 @@ export default function AudioInterface({
     "disconnected" | "connecting" | "connected"
   >("disconnected");
 
+  // Create WebSocket once and reuse to maintain conversation context
+  useEffect(() => {
+    if (!isSessionActive) return;
+
+    // Only create the WebSocket if it doesn't exist yet
+    if (!geminiWsRef.current) {
+      console.log("[Audio] Creating new WebSocket connection");
+      geminiWsRef.current = new GeminiWebSocket(
+        (text) => {
+          console.log("Received from Gemini:", text);
+        },
+        () => {
+          console.log("[Audio] WebSocket setup complete");
+          setIsWebSocketReady(true);
+          setConnectionStatus("connected");
+        },
+        (isPlaying) => {
+          setIsModelSpeaking(isPlaying);
+        },
+        (level) => {
+          setOutputAudioLevel(level);
+        },
+        onTranscription
+      );
+    }
+
+    return () => {
+      // Do not disconnect WebSocket when component unmounts
+      // This preserves the session context
+      if (!isSessionActive && geminiWsRef.current) {
+        console.log("[Audio] Cleaning up WebSocket on session end");
+        cleanupWebSocket();
+      }
+    };
+  }, [isSessionActive, onTranscription]);
+
   const cleanupAudio = useCallback(() => {
     if (audioWorkletNodeRef.current) {
       audioWorkletNodeRef.current.disconnect();
@@ -57,7 +93,7 @@ export default function AudioInterface({
 
   // Send audio data to Gemini
   const sendAudioData = (b64Data: string) => {
-    if (!geminiWsRef.current) return;
+    if (!geminiWsRef.current || !isWebSocketReady) return;
     geminiWsRef.current.sendMediaChunk(b64Data, "audio/pcm");
   };
 
@@ -65,10 +101,11 @@ export default function AudioInterface({
   const toggleListening = async () => {
     if (isListening && stream) {
       setIsListening(false);
-      cleanupWebSocket();
+      // Note: We DON'T cleanup WebSocket here to maintain context
       cleanupAudio();
       stream.getTracks().forEach((track) => track.stop());
       setStream(null);
+      setConnectionStatus("connected"); // Still connected, just not listening
     } else {
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({
@@ -87,50 +124,18 @@ export default function AudioInterface({
 
         setStream(audioStream);
         setIsListening(true);
+
+        // Connect WebSocket if not already connected
+        if (geminiWsRef.current && !isWebSocketReady) {
+          setConnectionStatus("connecting");
+          geminiWsRef.current.connect();
+        }
       } catch (err) {
         console.error("Error accessing audio devices:", err);
         cleanupAudio();
       }
     }
   };
-
-  // Initialize WebSocket connection
-  useEffect(() => {
-    if (!isListening || !isSessionActive) {
-      setConnectionStatus("disconnected");
-      return;
-    }
-
-    setConnectionStatus("connecting");
-    geminiWsRef.current = new GeminiWebSocket(
-      (text) => {
-        console.log("Received from Gemini:", text);
-      },
-      () => {
-        console.log("[Audio] WebSocket setup complete, starting audio capture");
-        setIsWebSocketReady(true);
-        setConnectionStatus("connected");
-      },
-      (isPlaying) => {
-        setIsModelSpeaking(isPlaying);
-      },
-      (level) => {
-        setOutputAudioLevel(level);
-      },
-      onTranscription
-    );
-    geminiWsRef.current.connect();
-
-    return () => {
-      if (contentIntervalRef.current) {
-        clearInterval(contentIntervalRef.current);
-        contentIntervalRef.current = null;
-      }
-      cleanupWebSocket();
-      setIsWebSocketReady(false);
-      setConnectionStatus("disconnected");
-    };
-  }, [isListening, onTranscription, cleanupWebSocket, isSessionActive]);
 
   // Start content capture only after WebSocket is ready
   useEffect(() => {
@@ -245,7 +250,7 @@ export default function AudioInterface({
 
   // Capture and send content
   const captureAndSendContent = () => {
-    if (!geminiWsRef.current) return;
+    if (!geminiWsRef.current || !isWebSocketReady) return;
 
     try {
       // Get content (code or math canvas) from parent component
@@ -264,7 +269,17 @@ export default function AudioInterface({
         const textEncoder = new TextEncoder();
         const contentBytes = textEncoder.encode(contentData);
         const b64Content = Base64.fromUint8Array(contentBytes);
-        geminiWsRef.current.sendTextContent(b64Content);
+
+        // Check if sendTextContent method exists in GeminiWebSocket
+        if (typeof geminiWsRef.current.sendTextContent === "function") {
+          geminiWsRef.current.sendTextContent(b64Content);
+        } else {
+          console.warn(
+            "sendTextContent method not available in GeminiWebSocket"
+          );
+          // Fallback to sending as media chunk if method doesn't exist
+          geminiWsRef.current.sendMediaChunk(b64Content, "text/plain");
+        }
       }
     } catch (error) {
       console.error(`Error capturing ${contentType} content:`, error);
