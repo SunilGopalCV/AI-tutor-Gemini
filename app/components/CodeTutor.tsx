@@ -1,7 +1,7 @@
 // app/components/CodeTutor.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import CodeEditor from "./CodeEditor";
 import AudioInterface from "./AudioInterface";
 import ConversationLog from "./ConversationLog";
@@ -20,28 +20,36 @@ export default function CodeTutor() {
     {
       role: "ai",
       content:
-        "Welcome to the coding session! I'm your AI tutor. Once you start the session, you can speak to me about your code and I'll help you understand concepts, debug issues, or improve your implementation.",
+        "Welcome to the coding session! I'm your AI tutor. Once you start the session, you can capture an image of your code and then speak to me about it, and I'll help you understand concepts, debug issues, or improve your implementation.",
     },
   ]);
   const [language, setLanguage] = useState("javascript");
+  const codeEditorRef = useRef<any>(null);
+  const [codeImageBase64, setCodeImageBase64] = useState<string>("");
 
   const handleTranscription = (text: string) => {
     setMessages((prev) => [...prev, { role: "ai", content: text }]);
   };
 
   const captureContent = () => {
-    // For code, we return the code text with language information
-    return `Language: ${language}\n\nCode:\n${code}`;
+    // For code, we return the captured image data
+    return codeImageBase64;
+  };
+
+  const handleCodeImageCaptured = (imageData: string) => {
+    setCodeImageBase64(imageData);
+    console.log("Code image captured:", imageData.substring(0, 50) + "...");
   };
 
   const startSession = () => {
     setIsSessionActive(true);
+    setCodeImageBase64(""); // Clear previous image on new session
     setMessages((prev) => [
       ...prev,
       {
         role: "ai",
         content:
-          "Session started. I can now see your code and hear you. Ask me any questions about your code.",
+          "Session started. Capture an image of your code, and then ask me any questions about it.",
       },
     ]);
   };
@@ -64,9 +72,9 @@ export default function CodeTutor() {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-160px)]">
-      <div className="flex flex-col space-y-4">
-        <Card className="flex-1 border shadow-sm">
-          <CardHeader className="pb-2">
+      <div className="flex flex-col space-y-4 h-full">
+        <Card className="flex-1 border shadow-sm flex flex-col">
+          <CardHeader className="pb-2 flex-shrink-0">
             <div className="flex justify-between items-center">
               <CardTitle className="text-lg font-semibold">
                 Code Editor
@@ -107,8 +115,15 @@ export default function CodeTutor() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-2 h-full">
-            <CodeEditor value={code} onChange={setCode} language={language} />
+          <CardContent className="pt-2 flex-1 overflow-hidden">
+            <div className="h-full">
+              <CodeEditor
+                value={code}
+                onChange={setCode}
+                language={language}
+                onCaptureImage={handleCodeImageCaptured}
+              />
+            </div>
           </CardContent>
         </Card>
 
@@ -121,14 +136,16 @@ export default function CodeTutor() {
       </div>
 
       <div className="flex flex-col h-full">
-        <Card className="h-full border shadow-sm">
-          <CardHeader className="pb-2">
+        <Card className="h-full border shadow-sm flex flex-col">
+          <CardHeader className="pb-2 flex-shrink-0">
             <CardTitle className="text-lg font-semibold">
               Conversation History
             </CardTitle>
           </CardHeader>
-          <CardContent className="pt-2 h-full] pb-4">
-            <ConversationLog messages={messages} />
+          <CardContent className="pt-2 flex-1 overflow-hidden">
+            <div className="h-full">
+              <ConversationLog messages={messages} />
+            </div>
           </CardContent>
         </Card>
       </div>
