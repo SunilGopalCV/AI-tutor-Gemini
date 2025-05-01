@@ -1,8 +1,8 @@
 // app/components/CodeTutor.tsx
 "use client";
 
-import { useState, useRef } from "react";
-import CodeEditor from "./CodeEditor";
+import { useState, useRef, useEffect } from "react";
+import CodeEditor, { CodeEditorRef } from "./CodeEditor";
 import AudioInterface from "./AudioInterface";
 import ConversationLog from "./ConversationLog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,15 +24,34 @@ export default function CodeTutor() {
     },
   ]);
   const [language, setLanguage] = useState("javascript");
-  const codeEditorRef = useRef<any>(null);
+  const codeEditorRef = useRef<CodeEditorRef>(null);
   const [codeImageBase64, setCodeImageBase64] = useState<string>("");
+
+  // Effect to capture code image when session starts
+  useEffect(() => {
+    if (isSessionActive && codeEditorRef.current) {
+      // Force a capture when session starts
+      const captureOnStart = async () => {
+        try {
+          await codeEditorRef.current?.captureImage();
+        } catch (err) {
+          console.error("Failed to capture initial image:", err);
+        }
+      };
+
+      captureOnStart();
+    }
+  }, [isSessionActive]);
 
   const handleTranscription = (text: string) => {
     setMessages((prev) => [...prev, { role: "ai", content: text }]);
   };
 
   const captureContent = () => {
-    // For code, we return the captured image data
+    // For code, we get the latest image from the editor ref
+    if (codeEditorRef.current) {
+      return codeEditorRef.current.getImageData();
+    }
     return codeImageBase64;
   };
 
@@ -43,13 +62,12 @@ export default function CodeTutor() {
 
   const startSession = () => {
     setIsSessionActive(true);
-    setCodeImageBase64(""); // Clear previous image on new session
     setMessages((prev) => [
       ...prev,
       {
         role: "ai",
         content:
-          "Session started. Capture an image of your code, and then ask me any questions about it.",
+          "Session started. Ask me any questions about your code, and I'll help you.",
       },
     ]);
   };
@@ -118,6 +136,7 @@ export default function CodeTutor() {
           <CardContent className="pt-2 flex-1 overflow-hidden">
             <div className="h-full">
               <CodeEditor
+                ref={codeEditorRef}
                 value={code}
                 onChange={setCode}
                 language={language}
