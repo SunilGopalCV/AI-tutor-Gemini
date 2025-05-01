@@ -1,10 +1,9 @@
-// app/components/AudioInterface.tsx
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff } from "lucide-react";
+import { Mic, MicOff, PlayIcon, Square } from "lucide-react";
 import { GeminiWebSocket } from "../services/geminiWebSocket";
 import { Base64 } from "js-base64";
 
@@ -12,14 +11,14 @@ interface AudioInterfaceProps {
   onTranscription: (text: string) => void;
   captureContentCallback: () => string;
   contentType: "code" | "math";
-  isSessionActive: boolean;
+  onSessionStateChange?: (isActive: boolean) => void;
 }
 
 export default function AudioInterface({
   onTranscription,
   captureContentCallback,
   contentType,
-  isSessionActive,
+  onSessionStateChange,
 }: AudioInterfaceProps) {
   const audioContextRef = useRef<AudioContext | null>(null);
   const [isListening, setIsListening] = useState(false);
@@ -36,42 +35,7 @@ export default function AudioInterface({
   const [connectionStatus, setConnectionStatus] = useState<
     "disconnected" | "connecting" | "connected"
   >("disconnected");
-
-  // Create WebSocket once and reuse to maintain conversation context
-  useEffect(() => {
-    if (!isSessionActive) return;
-
-    // Only create the WebSocket if it doesn't exist yet
-    if (!geminiWsRef.current) {
-      console.log("[Audio] Creating new WebSocket connection");
-      geminiWsRef.current = new GeminiWebSocket(
-        (text) => {
-          console.log("Received from Gemini:", text);
-        },
-        () => {
-          console.log("[Audio] WebSocket setup complete");
-          setIsWebSocketReady(true);
-          setConnectionStatus("connected");
-        },
-        (isPlaying) => {
-          setIsModelSpeaking(isPlaying);
-        },
-        (level) => {
-          setOutputAudioLevel(level);
-        },
-        onTranscription
-      );
-    }
-
-    return () => {
-      // Do not disconnect WebSocket when component unmounts
-      // This preserves the session context
-      if (!isSessionActive && geminiWsRef.current) {
-        console.log("[Audio] Cleaning up WebSocket on session end");
-        cleanupWebSocket();
-      }
-    };
-  }, [isSessionActive, onTranscription]);
+  const [isSessionActive, setIsSessionActive] = useState(false);
 
   const cleanupAudio = useCallback(() => {
     if (audioWorkletNodeRef.current) {
@@ -105,8 +69,14 @@ export default function AudioInterface({
       cleanupAudio();
       stream.getTracks().forEach((track) => track.stop());
       setStream(null);
-      setConnectionStatus("connected"); // Still connected, just not listening
+      // Keep the connection status as connected since WebSocket stays open
+      setConnectionStatus("connected");
     } else {
+      if (!isSessionActive) {
+        // If session is not active, start it first
+        toggleSession();
+      }
+
       try {
         const audioStream = await navigator.mediaDevices.getUserMedia({
           audio: {
@@ -136,6 +106,44 @@ export default function AudioInterface({
       }
     }
   };
+
+  // Create WebSocket once and reuse to maintain conversation context
+  useEffect(() => {
+    if (!isSessionActive) {
+      // Cleanup WebSocket when session ends
+      if (geminiWsRef.current) {
+        console.log("[Audio] Cleaning up WebSocket on session end");
+        cleanupWebSocket();
+        setIsWebSocketReady(false);
+        setConnectionStatus("disconnected");
+      }
+      return;
+    }
+
+    // Only create the WebSocket if it doesn't exist yet
+    if (!geminiWsRef.current) {
+      console.log("[Audio] Creating new WebSocket connection");
+      setConnectionStatus("connecting");
+      geminiWsRef.current = new GeminiWebSocket(
+        (text) => {
+          console.log("Received from Gemini:", text);
+        },
+        () => {
+          console.log("[Audio] WebSocket setup complete");
+          setIsWebSocketReady(true);
+          setConnectionStatus("connected");
+        },
+        (isPlaying) => {
+          setIsModelSpeaking(isPlaying);
+        },
+        (level) => {
+          setOutputAudioLevel(level);
+        },
+        onTranscription
+      );
+      geminiWsRef.current.connect();
+    }
+  }, [isSessionActive, onTranscription, cleanupWebSocket]);
 
   // Start content capture only after WebSocket is ready
   useEffect(() => {
@@ -286,7 +294,26 @@ export default function AudioInterface({
     }
   };
 
-  if (!isSessionActive) return null;
+  // Toggle session
+  const toggleSession = () => {
+    const newSessionState = !isSessionActive;
+    setIsSessionActive(newSessionState);
+
+    if (onSessionStateChange) {
+      onSessionStateChange(newSessionState);
+    }
+
+    if (!newSessionState && isListening) {
+      // Stop listening if session is stopped
+      setIsListening(false);
+      cleanupAudio();
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+        setStream(null);
+      }
+      // WebSocket cleanup is handled in the session effect
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -298,38 +325,65 @@ export default function AudioInterface({
                 AI Tutor {isModelSpeaking ? "Speaking" : "Listening"}
               </h3>
               <p className="text-sm text-gray-500">
-                {connectionStatus === "connected"
-                  ? "Connected to Gemini"
-                  : connectionStatus === "connecting"
-                  ? "Connecting..."
-                  : "Disconnected"}
+                {isSessionActive
+                  ? connectionStatus === "connected"
+                    ? "Connected to Gemini"
+                    : connectionStatus === "connecting"
+                    ? "Connecting..."
+                    : "Session active - Start speaking"
+                  : "Session inactive - Start session to begin"}
               </p>
             </div>
-            <Button
-              onClick={toggleListening}
-              size="icon"
-              className={`rounded-full w-12 h-12 transition-colors
-                ${
-                  isListening
-                    ? "bg-red-500 hover:bg-red-600 text-white"
-                    : "bg-green-500 hover:bg-green-600 text-white"
-                }`}
-              disabled={!isSessionActive}
-            >
-              {isListening ? (
-                <MicOff className="h-6 w-6" />
-              ) : (
-                <Mic className="h-6 w-6" />
+            <div className="flex space-x-2">
+              <Button
+                onClick={toggleSession}
+                size="sm"
+                variant={isSessionActive ? "destructive" : "default"}
+                className="text-sm"
+              >
+                {isSessionActive ? (
+                  <>
+                    <Square className="h-4 w-4 mr-1" /> Stop Session
+                  </>
+                ) : (
+                  <>
+                    <PlayIcon className="h-4 w-4 mr-1" /> Start Session
+                  </>
+                )}
+              </Button>
+              {isSessionActive && (
+                <Button
+                  onClick={toggleListening}
+                  size="icon"
+                  className={`rounded-full w-12 h-12 transition-colors
+                  ${
+                    isListening
+                      ? "bg-red-500 hover:bg-red-600 text-white"
+                      : "bg-green-500 hover:bg-green-600 text-white"
+                  }`}
+                >
+                  {isListening ? (
+                    <MicOff className="h-6 w-6" />
+                  ) : (
+                    <Mic className="h-6 w-6" />
+                  )}
+                </Button>
               )}
-            </Button>
+            </div>
           </div>
 
-          {isListening && (
+          {isSessionActive && (
             <div className="w-full h-2 rounded-full bg-gray-100">
               <div
                 className="h-full rounded-full transition-all bg-blue-500"
                 style={{
-                  width: `${isModelSpeaking ? outputAudioLevel : audioLevel}%`,
+                  width: `${
+                    isModelSpeaking
+                      ? outputAudioLevel
+                      : isListening
+                      ? audioLevel
+                      : 0
+                  }%`,
                   transition: "width 100ms ease-out",
                 }}
               />
