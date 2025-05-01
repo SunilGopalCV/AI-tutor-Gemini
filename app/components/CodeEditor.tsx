@@ -1,8 +1,14 @@
 "use client";
 
-import { useRef, useEffect, useState, forwardRef, useImperativeHandle } from "react";
+import {
+  useRef,
+  useEffect,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import Editor from "@monaco-editor/react";
-import html2canvas from 'html2canvas';
+import html2canvas from "html2canvas-pro";
 
 interface CodeEditorProps {
   value: string;
@@ -83,7 +89,7 @@ const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
       captureIntervalRef.current = setInterval(() => {
         const now = Date.now();
         const timeSinceLastCapture = now - lastCaptureTimeRef.current;
-        
+
         // Only capture if it's been at least 2 seconds since the last capture
         if (timeSinceLastCapture >= 2000) {
           captureCodeImage();
@@ -92,20 +98,26 @@ const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
     };
 
     const captureCodeImage = async (): Promise<string> => {
-      if (!editorRef.current || !editorContainerRef.current || !isEditorMounted) return "";
+      if (!editorRef.current || !editorContainerRef.current || !isEditorMounted)
+        return "";
 
       try {
         // Find the actual editor DOM element (the parent div contains it)
-        const editorElement = editorContainerRef.current.querySelector('.monaco-editor');
+        const editorElement =
+          editorContainerRef.current.querySelector(".monaco-editor");
         if (!editorElement) {
           console.warn("Monaco editor element not found, skipping capture");
           return "";
         }
 
         // Ensure the editor has visible content
-        const contentArea = (editorElement as HTMLElement).querySelector('.view-lines');
+        const contentArea = (editorElement as HTMLElement).querySelector(
+          ".view-lines"
+        );
         if (!contentArea || (contentArea as HTMLElement).offsetHeight === 0) {
-          console.warn("Editor content area not properly loaded, skipping capture");
+          console.warn(
+            "Editor content area not properly loaded, skipping capture"
+          );
           return "";
         }
 
@@ -116,18 +128,19 @@ const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
           logging: false,
           useCORS: true,
         });
-        
+
         const imageData = canvas.toDataURL("image/png");
-        
+
         // Validate image data before sending
-        if (imageData && imageData.length > 1000) { // Simple validation to ensure non-empty image
+        if (imageData && imageData.length > 1000) {
+          // Simple validation to ensure non-empty image
           // Store the latest image data for retrieval via getImageData()
           latestImageRef.current = imageData;
-          
+
           // Send the image to the parent component
           onCaptureImage(imageData);
           lastCaptureTimeRef.current = Date.now();
-          
+
           return imageData;
         } else {
           console.warn("Generated image data is invalid or too small");
@@ -142,11 +155,11 @@ const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
     // Handle code changes with proper debouncing
     useEffect(() => {
       if (!isEditorMounted) return;
-      
+
       const debounceTimer = setTimeout(() => {
         captureCodeImage();
       }, 1000); // 1 second debounce
-      
+
       return () => clearTimeout(debounceTimer);
     }, [value]);
 

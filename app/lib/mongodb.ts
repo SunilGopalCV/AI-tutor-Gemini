@@ -2,7 +2,8 @@
 import mongoose from "mongoose";
 
 const MONGODB_URI =
-  process.env.MONGODB_URI || "mongodb://localhost:27017/vision-tutor";
+  process.env.NEXT_PUBLIC_MONGODB_URI ||
+  "mongodb://localhost:27017/vision-tutor";
 
 let cached = (global as any).mongoose;
 
