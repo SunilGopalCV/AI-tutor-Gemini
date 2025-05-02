@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/app/hooks/useAuth";
 import Link from "next/link";
-import { Button } from "@/app/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { usePathname } from "next/navigation";
 
 export default function Navbar() {

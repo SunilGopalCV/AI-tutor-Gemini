@@ -53,7 +53,7 @@ export default function ConversationLog({ messages }: ConversationLogProps) {
               </Avatar>
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-zinc-900">
+                  <p className="text-sm font-medium text-gray-200">
                     {message.role === "ai" ? "AI Tutor" : "You"}
                   </p>
                 </div>

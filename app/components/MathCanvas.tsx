@@ -1,382 +1,400 @@
 "use client";
 
-import {
+import React, {
   useRef,
-  useEffect,
-  forwardRef,
-  useImperativeHandle,
   useState,
+  useEffect,
+  useImperativeHandle,
+  forwardRef,
 } from "react";
 import { Button } from "@/components/ui/button";
-import { Eraser, Trash2, Undo, Redo, Palette, Upload } from "lucide-react";
+import { Upload, Trash2, Undo, Redo, Eraser, Palette } from "lucide-react";
+
+type Mode = "pen" | "eraser";
 
 interface MathCanvasProps {
   className?: string;
   onImageCapture?: (imageData: string) => void;
 }
 
-interface CanvasRef {
-  getImageData: () => string;
-  loadImage: (file: File) => Promise<void>;
+export interface MathCanvasRef {
   clearCanvas: () => void;
-  undo: () => void;
-  redo: () => void;
+  getImageData: () => string | null;
+  loadImage: (file: File) => Promise<void>;
 }
 
-const MathCanvas = forwardRef<CanvasRef, MathCanvasProps>(
+const MathCanvas = forwardRef<MathCanvasRef, MathCanvasProps>(
   ({ className, onImageCapture }, ref) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const contextRef = useRef<CanvasRenderingContext2D | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [isDrawing, setIsDrawing] = useState(false);
-    const [color, setColor] = useState("#000000");
-    const [brushSize, setBrushSize] = useState(3);
-    const [mode, setMode] = useState<"pen" | "eraser">("pen");
-    const [history, setHistory] = useState<ImageData[]>([]);
-    const [redoStack, setRedoStack] = useState<ImageData[]>([]);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const captureIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    const lastCaptureTimeRef = useRef(0);
+    const [mode, setMode] = useState<Mode>("pen");
+    const [color, setColor] = useState<string>("#000000");
+    const [eraserSize, setEraserSize] = useState<number>(10);
+    const [history, setHistory] = useState<string[]>([]);
+    const [redoStack, setRedoStack] = useState<string[]>([]);
 
+    useImperativeHandle(ref, () => ({
+      clearCanvas,
+      getImageData,
+      loadImage: (file) => loadImage(file),
+    }));
+
+    // Initialize canvas on first render
     useEffect(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+      const initializeCanvas = () => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          // Set the canvas dimensions to match its display size
+          canvas.width = canvas.clientWidth;
+          canvas.height = canvas.clientHeight;
 
-      canvas.width = canvas.offsetWidth * 2;
-      canvas.height = canvas.offsetHeight * 2;
-      canvas.style.width = `${canvas.offsetWidth}px`;
-      canvas.style.height = `${canvas.offsetHeight}px`;
-
-      const context = canvas.getContext("2d");
-      if (!context) return;
-
-      context.scale(2, 2);
-      context.lineCap = "round";
-      context.strokeStyle = color;
-      context.lineWidth = brushSize;
-      contextRef.current = context; // Save initial state
-
-      saveHistoryState(); // Start periodic capture for sending to Gemini
-
-      startAutomaticCapture();
-
-      return () => {
-        if (captureIntervalRef.current) {
-          clearInterval(captureIntervalRef.current);
-          captureIntervalRef.current = null;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+          saveState();
         }
       };
-    }, []); // Start automatic capture for sending to Gemini
 
-    const startAutomaticCapture = () => {
-      if (captureIntervalRef.current) {
-        clearInterval(captureIntervalRef.current);
-      }
+      initializeCanvas();
 
-      captureIntervalRef.current = setInterval(() => {
-        const now = Date.now();
-        const timeSinceLastCapture = now - lastCaptureTimeRef.current; // Only capture if it's been at least 2 seconds since the last capture
-        if (timeSinceLastCapture >= 2000) {
-          const imageData = getImageData();
-          if (onImageCapture && imageData) {
-            onImageCapture(imageData);
-            lastCaptureTimeRef.current = now;
+      // Also handle window resize
+      const handleResize = () => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const imageData = canvas.toDataURL(); // Save current drawing
+
+          // Resize canvas
+          canvas.width = canvas.clientWidth;
+          canvas.height = canvas.clientHeight;
+
+          // Restore the drawing
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            const img = new Image();
+            img.onload = () => {
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+            img.src = imageData;
           }
         }
-      }, 2000);
-    };
+      };
 
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
+    }, []);
+
+    // Notify parent component of image updates
     useEffect(() => {
-      if (!contextRef.current) return;
-
-      if (mode === "pen") {
-        contextRef.current.strokeStyle = color;
-        contextRef.current.lineWidth = brushSize;
-      } else {
-        contextRef.current.strokeStyle = "#FFFFFF";
-        contextRef.current.lineWidth = brushSize * 3;
+      if (history.length > 0 && onImageCapture) {
+        onImageCapture(history[history.length - 1]);
       }
-    }, [color, brushSize, mode]);
+    }, [history, onImageCapture]);
 
-    const startDrawing = ({
-      nativeEvent,
-    }: React.MouseEvent | React.TouchEvent) => {
+    const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
       const canvas = canvasRef.current;
-      if (!canvas || !contextRef.current) return;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-      const { offsetX, offsetY } =
-        nativeEvent instanceof MouseEvent
-          ? nativeEvent
-          : {
-              offsetX:
-                (nativeEvent as TouchEvent).touches[0].clientX -
-                canvas.getBoundingClientRect().left,
-              offsetY:
-                (nativeEvent as TouchEvent).touches[0].clientY -
-                canvas.getBoundingClientRect().top,
-            };
-
-      contextRef.current.beginPath();
-      contextRef.current.moveTo(offsetX, offsetY);
       setIsDrawing(true);
+      ctx.beginPath();
+
+      const { x, y } = getCoordinates(e, canvas);
+      ctx.moveTo(x, y);
+
+      ctx.strokeStyle = mode === "pen" ? color : "#FFFFFF";
+      ctx.lineWidth = mode === "pen" ? 2 : eraserSize;
+      ctx.lineCap = "round";
     };
 
-    const draw = ({ nativeEvent }: React.MouseEvent | React.TouchEvent) => {
-      if (!isDrawing || !contextRef.current) return;
-
+    const draw = (e: React.MouseEvent | React.TouchEvent) => {
+      if (!isDrawing) return;
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const { offsetX, offsetY } =
-        nativeEvent instanceof MouseEvent
-          ? nativeEvent
-          : {
-              offsetX:
-                (nativeEvent as TouchEvent).touches[0].clientX -
-                canvas.getBoundingClientRect().left,
-              offsetY:
-                (nativeEvent as TouchEvent).touches[0].clientY -
-                canvas.getBoundingClientRect().top,
-            };
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-      contextRef.current.lineTo(offsetX, offsetY);
-      contextRef.current.stroke();
+      const { x, y } = getCoordinates(e, canvas);
+      ctx.lineTo(x, y);
+      ctx.stroke();
     };
 
     const finishDrawing = () => {
-      if (!contextRef.current) return;
-      contextRef.current.closePath();
+      if (!isDrawing) return;
       setIsDrawing(false);
-      saveHistoryState();
-    };
-
-    const saveHistoryState = () => {
-      if (!canvasRef.current || !contextRef.current) return;
-
-      const imageData = contextRef.current.getImageData(
-        0,
-        0,
-        canvasRef.current.width,
-        canvasRef.current.height
-      );
-
-      setHistory((prev) => [...prev, imageData]);
+      const canvas = canvasRef.current;
+      canvas?.getContext("2d")?.closePath();
+      saveState();
       setRedoStack([]);
     };
 
-    const loadImage = async (file: File): Promise<void> => {
-      return new Promise((resolve, reject) => {
-        if (!canvasRef.current || !contextRef.current) {
-          reject(new Error("Canvas not initialized"));
-          return;
-        }
+    // Improved coordinate translation function
+    const getCoordinates = (e: any, canvas: HTMLCanvasElement) => {
+      // Get the actual rendered dimensions of the canvas
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
 
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const img = new Image();
-          img.onload = () => {
-            if (!canvasRef.current || !contextRef.current) return;
+      // Get mouse/touch position
+      const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+      const clientY = e.clientY ?? e.touches?.[0]?.clientY;
 
-            contextRef.current.clearRect(
-              0,
-              0,
-              canvasRef.current.width,
-              canvasRef.current.height
-            ); // Calculate dimensions to fit the image while preserving aspect ratio
+      // Calculate position within canvas, accounting for scaling
+      const x = (clientX - rect.left) * scaleX;
+      const y = (clientY - rect.top) * scaleY;
 
-            const canvas = canvasRef.current;
-            const ctx = contextRef.current;
+      return { x, y };
+    };
 
-            const ratio = Math.min(
-              canvas.width / (2 * img.width),
-              canvas.height / (2 * img.height)
-            );
-
-            const centerX = (canvas.width / 2 - img.width * ratio) / 2;
-            const centerY = (canvas.height / 2 - img.height * ratio) / 2;
-
-            ctx.drawImage(
-              img,
-              centerX,
-              centerY,
-              img.width * ratio,
-              img.height * ratio
-            );
-
-            saveHistoryState(); // Capture the image after loading
-            if (onImageCapture) {
-              const imageData = getImageData();
-              onImageCapture(imageData);
-              lastCaptureTimeRef.current = Date.now();
-            }
-            resolve();
-          };
-          img.onerror = () => {
-            reject(new Error("Failed to load image"));
-          };
-          img.src = event.target?.result as string;
-        };
-        reader.onerror = () => {
-          reject(new Error("Failed to read file"));
-        };
-        reader.readAsDataURL(file);
-      });
+    const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setColor(e.target.value);
     };
 
     const clearCanvas = () => {
-      if (!canvasRef.current || !contextRef.current) return;
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext("2d");
+      if (canvas && ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "white";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        saveState();
+        setRedoStack([]);
+      }
+    };
 
-      contextRef.current.clearRect(
-        0,
-        0,
-        canvasRef.current.width,
-        canvasRef.current.height
-      );
+    const saveState = () => {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const imgData = canvas.toDataURL();
+        setHistory((prev) => [...prev, imgData].slice(-20));
+      }
+    };
 
-      saveHistoryState(); // Capture the cleared canvas
-      if (onImageCapture) {
-        const imageData = getImageData();
-        onImageCapture(imageData);
-        lastCaptureTimeRef.current = Date.now();
+    const restoreState = (img: string) => {
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext("2d");
+      if (canvas && ctx) {
+        const image = new Image();
+        image.onload = () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+        };
+        image.src = img;
       }
     };
 
     const undo = () => {
-      if (history.length <= 1 || !canvasRef.current || !contextRef.current)
-        return;
-
-      const lastState = history[history.length - 2];
-      const currentState = history[history.length - 1];
-
-      setRedoStack((prev) => [...prev, currentState]);
-      setHistory((prev) => prev.slice(0, -1));
-
-      contextRef.current.putImageData(lastState, 0, 0); // Capture after undo
-      if (onImageCapture) {
-        const imageData = getImageData();
-        onImageCapture(imageData);
-        lastCaptureTimeRef.current = Date.now();
+      if (history.length > 1) {
+        const newHistory = [...history];
+        const last = newHistory.pop()!;
+        setRedoStack((prev) => [last, ...prev]);
+        const prevImg = newHistory[newHistory.length - 1];
+        setHistory(newHistory);
+        restoreState(prevImg);
       }
     };
 
     const redo = () => {
-      if (redoStack.length === 0 || !canvasRef.current || !contextRef.current)
-        return;
-
-      const nextState = redoStack[redoStack.length - 1];
-
-      setHistory((prev) => [...prev, nextState]);
-      setRedoStack((prev) => prev.slice(0, -1));
-
-      contextRef.current.putImageData(nextState, 0, 0); // Capture after redo
-      if (onImageCapture) {
-        const imageData = getImageData();
-        onImageCapture(imageData);
-        lastCaptureTimeRef.current = Date.now();
+      if (redoStack.length > 0) {
+        const [next, ...rest] = redoStack;
+        setHistory((prev) => [...prev, next]);
+        setRedoStack(rest);
+        restoreState(next);
       }
-    };
-
-    const getImageData = (): string => {
-      if (!canvasRef.current) return "";
-      return canvasRef.current.toDataURL("image/png");
-    };
-
-    useImperativeHandle(ref, () => ({
-      getImageData,
-      loadImage,
-      clearCanvas,
-      undo,
-      redo,
-    }));
-
-    const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setColor(e.target.value);
-      setMode("pen");
     };
 
     const handleImageUpload = () => {
       fileInputRef.current?.click();
     };
 
-    const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const onFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (file) {
-        try {
-          await loadImage(file);
-        } catch (error) {
-          console.error("Error loading image:", error);
-        }
+        loadImage(file);
       }
     };
 
+    const loadImage = (file: File): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          const img = new Image();
+
+          img.onload = () => {
+            const canvas = canvasRef.current;
+            if (!canvas) {
+              reject(new Error("Canvas not available"));
+              return;
+            }
+
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+              reject(new Error("Canvas context not available"));
+              return;
+            }
+
+            // Reset canvas dimensions to match its display size
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+
+            // Clear the canvas first
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Calculate dimensions to maintain aspect ratio
+            const canvasRatio = canvas.width / canvas.height;
+            const imgRatio = img.width / img.height;
+
+            let drawWidth, drawHeight, offsetX, offsetY;
+
+            if (imgRatio > canvasRatio) {
+              // Image is wider than canvas (relative to height)
+              drawWidth = canvas.width;
+              drawHeight = canvas.width / imgRatio;
+              offsetX = 0;
+              offsetY = (canvas.height - drawHeight) / 2;
+            } else {
+              // Image is taller than canvas (relative to width)
+              drawHeight = canvas.height;
+              drawWidth = canvas.height * imgRatio;
+              offsetX = (canvas.width - drawWidth) / 2;
+              offsetY = 0;
+            }
+
+            // Draw the image centered and properly scaled
+            ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+            saveState();
+            resolve();
+          };
+
+          img.onerror = () => {
+            reject(new Error("Failed to load image"));
+          };
+
+          img.src = reader.result as string;
+        };
+
+        reader.onerror = () => {
+          reject(new Error("Failed to read file"));
+        };
+
+        reader.readAsDataURL(file);
+      });
+    };
+
+    const getImageData = (): string | null => {
+      const canvas = canvasRef.current;
+      return canvas?.toDataURL() ?? null;
+    };
+
     return (
-      <div className="flex flex-col h-full">
-               {" "}
-        <div className="flex justify-center space-x-2 mb-2">
-                   {" "}
-          <Button
-            size="sm"
-            variant={mode === "pen" ? "default" : "outline"}
-            onClick={() => setMode("pen")}
-            className="px-2"
-          >
-                        <Palette className="h-4 w-4 mr-1" /> Pen          {" "}
-          </Button>
-                   {" "}
-          <input
-            type="color"
-            value={color}
-            onChange={handleColorChange}
-            className="w-8 h-8 p-0 border-0 rounded cursor-pointer"
-          />
-                   {" "}
-          <Button
-            size="sm"
-            variant={mode === "eraser" ? "default" : "outline"}
-            onClick={() => setMode("eraser")}
-            className="px-2"
-          >
-                        <Eraser className="h-4 w-4 mr-1" /> Eraser          {" "}
-          </Button>
-                   {" "}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={undo}
-            disabled={history.length <= 1}
-            className="px-2"
-          >
-                        <Undo className="h-4 w-4" />         {" "}
-          </Button>
-                   {" "}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={redo}
-            disabled={redoStack.length === 0}
-            className="px-2"
-          >
-                        <Redo className="h-4 w-4" />         {" "}
-          </Button>
-                   {" "}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={clearCanvas}
-            className="px-2"
-          >
-                        <Trash2 className="h-4 w-4" />         {" "}
-          </Button>
-                   {" "}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleImageUpload}
-            className="px-2"
-          >
-                        <Upload className="h-4 w-4 mr-1" /> Upload Problem      
-               {" "}
-          </Button>
-                   {" "}
+      <div className={`flex flex-col ${className}`}>
+        {/* Toolbar */}
+        <div className="flex justify-between items-center p-3 border-b bg-gray-50">
+          <div className="flex items-center gap-3">
+            <Button
+              size="default"
+              variant={mode === "pen" ? "default" : "outline"}
+              onClick={() => setMode("pen")}
+              className="px-4 h-10"
+            >
+              <span className="h-6 w-6 rounded-full bg-white flex items-center justify-center mr-2">
+                <Palette className="h-4 w-4 text-black" />
+              </span>{" "}
+              Pen
+            </Button>
+
+            <div className="relative">
+              <div
+                className="w-10 h-10 rounded-full border border-gray-300 cursor-pointer overflow-hidden"
+                style={{ backgroundColor: color }}
+                onClick={() => document.getElementById("colorPicker")?.click()}
+                title="Select color"
+              />
+              <input
+                id="colorPicker"
+                type="color"
+                value={color}
+                onChange={handleColorChange}
+                className="absolute opacity-0 w-0 h-0"
+              />
+            </div>
+
+            <Button
+              size="default"
+              variant={mode === "eraser" ? "default" : "outline"}
+              onClick={() => setMode("eraser")}
+              className="px-4 h-10"
+            >
+              <Eraser className="h-5 w-5 mr-2" /> Eraser
+            </Button>
+
+            {mode === "eraser" && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-gray-500">Size:</span>
+                <input
+                  type="range"
+                  min={5}
+                  max={50}
+                  value={eraserSize}
+                  onChange={(e) => setEraserSize(parseInt(e.target.value))}
+                  className="w-32"
+                />
+                <span className="text-xs font-medium">{eraserSize}px</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex gap-2">
+              <Button
+                size="default"
+                variant="outline"
+                onClick={undo}
+                disabled={history.length <= 1}
+                className="h-10 w-10 p-0"
+              >
+                <Undo className="h-5 w-5" />
+              </Button>
+
+              <Button
+                size="default"
+                variant="outline"
+                onClick={redo}
+                disabled={redoStack.length === 0}
+                className="h-10 w-10 p-0"
+              >
+                <Redo className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                size="default"
+                variant="outline"
+                onClick={clearCanvas}
+                className="h-10 px-4"
+              >
+                <Trash2 className="h-5 w-5 mr-2" /> Clear
+              </Button>
+
+              <Button
+                size="default"
+                variant="outline"
+                onClick={handleImageUpload}
+                className="h-10 px-4"
+              >
+                <Upload className="h-5 w-5 mr-2" /> Upload
+              </Button>
+            </div>
+          </div>
+
           <input
             type="file"
             ref={fileInputRef}
@@ -384,11 +402,10 @@ const MathCanvas = forwardRef<CanvasRef, MathCanvasProps>(
             accept="image/*"
             className="hidden"
           />
-                 {" "}
         </div>
-               {" "}
-        <div className="flex-1 relative">
-                   {" "}
+
+        {/* Canvas */}
+        <div className="w-full h-full flex-1">
           <canvas
             ref={canvasRef}
             onMouseDown={startDrawing}
@@ -398,18 +415,13 @@ const MathCanvas = forwardRef<CanvasRef, MathCanvasProps>(
             onTouchStart={startDrawing}
             onTouchMove={draw}
             onTouchEnd={finishDrawing}
-            className={`w-full h-full border border-gray-200 rounded-md bg-white touch-none ${
-              className || ""
-            }`}
+            className="w-full h-full border border-gray-200 rounded-md bg-white touch-none"
           />
-                 {" "}
         </div>
-             {" "}
       </div>
     );
   }
 );
 
 MathCanvas.displayName = "MathCanvas";
-
 export default MathCanvas;

@@ -118,3 +118,46 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  @keyframes gradient-border-move {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: 100% 50%;
+    }
+  }
+
+  .gradient-border {
+    position: relative;
+    z-index: 0;
+    border-radius: 0.75rem; /* customize as needed */
+  }
+
+  .gradient-border::before {
+    content: "";
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(
+      270deg,
+      #ff6ec4,
+      #a374ff,
+      #4facfe,
+      #ffb347,
+      #ff6ec4
+    );
+    background-size: 300% 300%;
+    animation: gradient-border-move 4s linear infinite;
+    z-index: -1;
+    border-radius: 0.75rem;
+    padding: 2px;
+    -webkit-mask: linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+}

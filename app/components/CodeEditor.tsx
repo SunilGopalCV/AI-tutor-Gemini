@@ -166,7 +166,7 @@ const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
     return (
       <div
         ref={editorContainerRef}
-        className={`w-full h-full border border-gray-200 rounded-md overflow-hidden flex flex-col ${
+        className={`w-full h-full rounded-md border-1 overflow-hidden flex flex-col ${
           className || ""
         }`}
       >
@@ -191,7 +191,7 @@ const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(
                 horizontalScrollbarSize: 8,
               },
             }}
-            theme="vs-light"
+            theme="vs-dark"
           />
         </div>
       </div>

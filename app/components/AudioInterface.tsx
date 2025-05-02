@@ -316,81 +316,79 @@ export default function AudioInterface({
   };
 
   return (
-    <div className="space-y-4">
-      <Card className="bg-white shadow-sm border border-gray-200">
-        <CardContent className="p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-medium text-gray-800">
-                AI Tutor {isModelSpeaking ? "Speaking" : "Listening"}
-              </h3>
-              <p className="text-sm text-gray-500">
-                {isSessionActive
-                  ? connectionStatus === "connected"
-                    ? "Connected to Gemini"
-                    : connectionStatus === "connecting"
-                    ? "Connecting..."
-                    : "Session active - Start speaking"
-                  : "Session inactive - Start session to begin"}
-              </p>
-            </div>
-            <div className="flex space-x-2">
+    <Card className="gradient-border bg-[#0d0d1a] shadow-sm  rounded-full w-full h-18 flex justify-center align-middle">
+      <CardContent>
+        <div className="flex items-center space-x-6 justify-between mb-1">
+          <div>
+            <h3 className="font-medium text-gray-100">
+              AI Tutor {isModelSpeaking ? "Speaking" : "Listening"}
+            </h3>
+            <p className="text-sm text-gray-500">
+              {isSessionActive
+                ? connectionStatus === "connected"
+                  ? "Connected to Gemini"
+                  : connectionStatus === "connecting"
+                  ? "Connecting..."
+                  : "Session active - Start speaking"
+                : "Session inactive - Start session to begin"}
+            </p>
+          </div>
+          <div className="flex space-x-4 items-center">
+            <Button
+              onClick={toggleSession}
+              size="sm"
+              variant={isSessionActive ? "destructive" : "secondary"}
+              className="text-sm"
+            >
+              {isSessionActive ? (
+                <>
+                  <Square className="h-4 w-4 mr-1" /> Stop Session
+                </>
+              ) : (
+                <>
+                  <PlayIcon className="h-4 w-4 mr-1" /> Start Session
+                </>
+              )}
+            </Button>
+            {isSessionActive && (
               <Button
-                onClick={toggleSession}
-                size="sm"
-                variant={isSessionActive ? "destructive" : "default"}
-                className="text-sm"
-              >
-                {isSessionActive ? (
-                  <>
-                    <Square className="h-4 w-4 mr-1" /> Stop Session
-                  </>
-                ) : (
-                  <>
-                    <PlayIcon className="h-4 w-4 mr-1" /> Start Session
-                  </>
-                )}
-              </Button>
-              {isSessionActive && (
-                <Button
-                  onClick={toggleListening}
-                  size="icon"
-                  className={`rounded-full w-12 h-12 transition-colors
+                onClick={toggleListening}
+                size="icon"
+                className={`rounded-full w-8 h-8 transition-colors ease-in-out
                   ${
                     isListening
-                      ? "bg-red-500 hover:bg-red-600 text-white"
-                      : "bg-green-500 hover:bg-green-600 text-white"
+                      ? "bg-green-500 hover:bg-green-600 text-white"
+                      : "bg-red-500 hover:bg-red-600 text-white"
                   }`}
-                >
-                  {isListening ? (
-                    <MicOff className="h-6 w-6" />
-                  ) : (
-                    <Mic className="h-6 w-6" />
-                  )}
-                </Button>
-              )}
-            </div>
+              >
+                {isListening ? (
+                  <Mic className="h-4 w-4" />
+                ) : (
+                  <MicOff className="h-4 w-4" />
+                )}
+              </Button>
+            )}
           </div>
+        </div>
 
-          {isSessionActive && (
-            <div className="w-full h-2 rounded-full bg-gray-100">
-              <div
-                className="h-full rounded-full transition-all bg-blue-500"
-                style={{
-                  width: `${
-                    isModelSpeaking
-                      ? outputAudioLevel
-                      : isListening
-                      ? audioLevel
-                      : 0
-                  }%`,
-                  transition: "width 100ms ease-out",
-                }}
-              />
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+        {isSessionActive && (
+          <div className="w-full h-1 rounded-full bg-gray-200">
+            <div
+              className="h-full rounded-full transition-all bg-blue-500 "
+              style={{
+                width: `${
+                  isModelSpeaking
+                    ? outputAudioLevel
+                    : isListening
+                    ? audioLevel
+                    : 0
+                }%`,
+                transition: "width 100ms ease-out",
+              }}
+            />
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
