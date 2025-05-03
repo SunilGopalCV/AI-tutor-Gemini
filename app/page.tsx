@@ -370,7 +370,7 @@ export default function HomePage() {
           <div className="max-w-4xl mx-auto text-center">
             {/* Funding badge */}
             <div className="inline-block px-4 py-2 bg-blue-900/50 rounded-full mb-6 backdrop-blur-sm border border-blue-700/30">
-              <p className="text-blue-300 font-medium">VisionTutor</p>
+              <p className="text-blue-300 font-medium">Levelling up</p>
             </div>
 
             {/* Main heading with animated text - increased font size */}

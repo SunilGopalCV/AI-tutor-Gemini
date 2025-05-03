@@ -6,7 +6,11 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ConversationLogProps {
-  messages: { role: "human" | "ai"; content: string }[];
+  messages: {
+    role: "human" | "ai";
+    content: string;
+    transcription?: string; // For storing user's speech transcription
+  }[];
 }
 
 export default function ConversationLog({ messages }: ConversationLogProps) {

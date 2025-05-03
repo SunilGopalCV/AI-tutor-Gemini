@@ -27,6 +27,7 @@ export class GeminiWebSocket {
   private onTranscriptionCallback: ((text: string) => void) | null = null;
   private transcriptionService: TranscriptionService;
   private accumulatedPcmData: string[] = [];
+  private accumulatedUserPcmData: string[] = [];
 
   constructor(
     onMessage: (text: string) => void,

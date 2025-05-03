@@ -323,28 +323,48 @@ export default function CodePage() {
           >
             <Card className="h-full bg-[#0d0d1a] border-[#1e1e2e] shadow-lg flex flex-col overflow-hidden">
               <CardHeader className="py-2 px-3 flex-shrink-0 border-b border-[#1e1e2e] bg-[#0f0f1d]">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-center w-full">
                   <div className="flex items-center space-x-2">
                     <MessageSquare className="h-5 w-5 text-purple-400" />
                     <CardTitle className="text-lg font-semibold text-white">
                       AI Tutor Conversation
                     </CardTitle>
                   </div>
-                  <div className="md:hidden">
+                  <div className="flex items-center gap-2">
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
-                      onClick={() => setShowMobileChat(false)}
-                      className="text-gray-400 hover:text-white hover:bg-[#2a2a3a]"
+                      onClick={() =>
+                        setMessages([
+                          {
+                            role: "ai",
+                            content:
+                              "Welcome to the math session! I'm your AI tutor. Once you start the session, I'll help you understand concepts, solve problems, or check your work.",
+                          },
+                        ])
+                      }
+                      className="border-gray-600 text-sm text-black hover:border-purple-500 hover:bg-[#1a1a2e] hover:text-white"
                     >
-                      <Code2 className="h-4 w-4" />
+                      Clear Chat
                     </Button>
+                    <div className="md:hidden">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowMobileChat(false)}
+                        className="text-gray-400 hover:text-white hover:bg-[#2a2a3a]"
+                      >
+                        <Code2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="p-0 flex-grow overflow-hidden">
                 <div className="h-full p-4 overflow-y-auto custom-scrollbar">
-                  <ConversationLog messages={messages} />
+                  <ConversationLog
+                    messages={messages.filter((msg) => msg.role === "ai")}
+                  />
                 </div>
               </CardContent>
             </Card>
