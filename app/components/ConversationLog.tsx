@@ -36,17 +36,11 @@ export default function ConversationLog({ messages }: ConversationLogProps) {
         <div className="space-y-6 pb-4">
           {messages.map((message, index) => (
             <div key={index} className="flex gap-3 items-start">
-              <Avatar
-                className={`h-8 w-8 ${
-                  message.role === "ai" ? "bg-blue-600" : ""
-                }`}
-              >
+              <Avatar className={`h-8 w-8 ${message.role === "ai" ? "" : ""}`}>
                 {message.role === "ai" ? (
                   <>
                     <AvatarImage src="/avatars/gemini.png" alt="AI Tutor" />
-                    <AvatarFallback className="bg-blue-600 text-white">
-                      AI
-                    </AvatarFallback>
+                    <AvatarFallback className="">AI</AvatarFallback>
                   </>
                 ) : (
                   <>
@@ -58,11 +52,11 @@ export default function ConversationLog({ messages }: ConversationLogProps) {
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium text-gray-200">
-                    {message.role === "ai" ? "AI Tutor" : "You"}
+                    {message.role === "ai" ? "VisionTutor" : "You"}
                   </p>
                 </div>
                 <div
-                  className={`rounded-lg px-3 py-2 text-sm ${
+                  className={`rounded-sm px-3 py-2 text-sm ${
                     message.role === "ai"
                       ? "bg-white border border-zinc-200 text-zinc-800"
                       : "bg-zinc-100 text-zinc-800"
